@@ -8,6 +8,8 @@ import glob
 import requests
 import time
 import tempfile
+import argparse
+import itertools
 from pathlib import Path
 from PIL import Image
 import numpy as np
@@ -16,7 +18,11 @@ import numpy as np
 try:
     LANCZOS = Image.Resampling.LANCZOS
 except AttributeError:
-    LANCZOS = Image.LANCZOS
+    try:
+        LANCZOS = Image.LANCZOS
+    except AttributeError:
+        # Use a string-based approach for older PIL versions
+        LANCZOS = "lanczos"
 
 API_BASE_URL = "http://localhost:8888"
 INPUT_DIR = "examples"
@@ -24,6 +30,24 @@ OUTPUT_DIR = "output"
 
 # Create output directory
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def parse_list_argument(value):
+    """Parse a comma-separated string into a list of values."""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(',')]
+
+def parse_float_list(value):
+    """Parse a comma-separated string into a list of floats."""
+    if not value:
+        return []
+    return [float(item.strip()) for item in value.split(',')]
+
+def parse_int_list(value):
+    """Parse a comma-separated string into a list of integers."""
+    if not value:
+        return []
+    return [int(item.strip()) for item in value.split(',')]
 
 def get_minimal_prompt_for_texture(filename):
     """Generate minimal prompts focused on PRESERVATION, not transformation."""
@@ -72,14 +96,15 @@ def split_rgba_image(image_path):
                 return rgb_img, None
         
         # Split RGBA into RGB and Alpha
-        rgb_img = Image.new('RGB', img.size, (255, 255, 255))  # White background
+        rgb_img = Image.new('RGB', img.size)  # Create RGB image
+        rgb_img.paste((255, 255, 255), (0, 0, img.size[0], img.size[1]))  # Fill with white
         rgb_img.paste(img, mask=img.split()[3])  # Use alpha as mask
         
         alpha_img = img.split()[3]  # Extract alpha channel
         
         return rgb_img, alpha_img
 
-def upscale_rgb_with_api(rgb_image, prompt):
+def upscale_rgb_with_api(rgb_image, prompt, noise_level, num_inference_steps, guidance_scale):
     """Upscale RGB image using the API."""
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
         rgb_image.save(temp_file.name, 'PNG')
@@ -88,12 +113,11 @@ def upscale_rgb_with_api(rgb_image, prompt):
     try:
         with open(temp_path, 'rb') as f:
             files = {'file': f}
-            # Research-optimized parameters
             data = {
                 'prompt': prompt,
-                'noise_level': 0.25,  # Higher noise preserves original structure
-                'num_inference_steps': 25,  # Optimal for SDXL upscaling
-                'guidance_scale': 7.5  # Sweet spot for upscaling
+                'noise_level': noise_level,
+                'num_inference_steps': num_inference_steps,
+                'guidance_scale': guidance_scale
             }
             
             response = requests.post(
@@ -153,7 +177,7 @@ def combine_rgb_alpha(rgb_image, alpha_image):
     
     return result_image
 
-def upscale_image_with_transparency(input_path, output_path, prompt):
+def upscale_image_with_transparency(input_path, output_path, prompt, noise_level, num_inference_steps, guidance_scale):
     """Upscale image preserving transparency by processing RGB and Alpha separately."""
     try:
         # Check if image has transparency
@@ -165,9 +189,9 @@ def upscale_image_with_transparency(input_path, output_path, prompt):
                 files = {'file': f}
                 data = {
                     'prompt': prompt,
-                    'noise_level': 0.25,
-                    'num_inference_steps': 25,
-                    'guidance_scale': 7.5
+                    'noise_level': noise_level,
+                    'num_inference_steps': num_inference_steps,
+                    'guidance_scale': guidance_scale
                 }
                 
                 response = requests.post(
@@ -190,10 +214,10 @@ def upscale_image_with_transparency(input_path, output_path, prompt):
             
             if alpha_img is None:
                 # Fallback to standard processing
-                return upscale_image_with_transparency(input_path, output_path, prompt)
+                return upscale_image_with_transparency(input_path, output_path, prompt, noise_level, num_inference_steps, guidance_scale)
             
             print(f"      🎨 Upscaling RGB component with API...")
-            success, result = upscale_rgb_with_api(rgb_img, prompt)
+            success, result = upscale_rgb_with_api(rgb_img, prompt, noise_level, num_inference_steps, guidance_scale)
             if not success:
                 return False, result, "rgb_failed"
             
@@ -216,8 +240,93 @@ def upscale_image_with_transparency(input_path, output_path, prompt):
     except Exception as e:
         return False, str(e), "error"
 
+def generate_parameter_combinations(args):
+    """Generate all combinations of parameters for testing."""
+    # Default values
+    noise_levels = [0.25] if not args.noise_levels else args.noise_levels
+    inference_steps = [25] if not args.inference_steps else args.inference_steps
+    guidance_scales = [7.5] if not args.guidance_scales else args.guidance_scales
+    prompts = ["game texture"] if not args.prompts else args.prompts
+    
+    # Generate all combinations
+    combinations = list(itertools.product(noise_levels, inference_steps, guidance_scales, prompts))
+    
+    print(f"🧪 PARAMETER COMBINATIONS:")
+    print(f"   • Noise Levels: {noise_levels}")
+    print(f"   • Inference Steps: {inference_steps}")
+    print(f"   • Guidance Scales: {guidance_scales}")
+    print(f"   • Prompts: {prompts}")
+    print(f"   • Total Combinations: {len(combinations)}")
+    print()
+    
+    return combinations
+
+def create_output_filename(base_name, noise_level, inference_steps, guidance_scale, prompt):
+    """Create output filename with parameter information."""
+    # Clean prompt for filename (remove special chars)
+    clean_prompt = "".join(c for c in prompt if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    clean_prompt = clean_prompt.replace(' ', '_')[:20]  # Limit length
+    
+    # Create parameter suffix
+    param_suffix = f"_n{noise_level}_i{inference_steps}_g{guidance_scale}_{clean_prompt}"
+    
+    # Insert before extension
+    name_part, ext = os.path.splitext(base_name)
+    return f"{name_part}{param_suffix}{ext}"
+
 def main():
-    """Main batch processing function with transparency preservation."""
+    """Main batch processing function with transparency preservation and parameter testing."""
+    # Declare globals at the start
+    global INPUT_DIR, OUTPUT_DIR, API_BASE_URL
+    
+    parser = argparse.ArgumentParser(
+        description="Batch upscale images with transparency preservation and parameter testing",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage with default parameters
+  python batch_upscale.py
+
+  # Test different noise levels
+  python batch_upscale.py --noise-levels 0.1,0.25,0.5
+
+  # Test multiple parameter combinations
+  python batch_upscale.py --noise-levels 0.1,0.25 --inference-steps 20,25 --guidance-scales 7.0,7.5
+
+  # Test different prompts
+  python batch_upscale.py --prompts "game texture,detailed texture,high quality texture"
+
+  # Full combinatorial testing
+  python batch_upscale.py --noise-levels 0.1,0.25,0.5 --inference-steps 20,25,30 --guidance-scales 7.0,7.5,8.0 --prompts "game texture,detailed texture"
+        """
+    )
+    
+    # File and directory arguments
+    parser.add_argument("--input-dir", default=INPUT_DIR, help="Input directory (default: examples)")
+    parser.add_argument("--output-dir", default=OUTPUT_DIR, help="Output directory (default: output)")
+    parser.add_argument("--api-url", default=API_BASE_URL, help="API base URL (default: http://localhost:8888)")
+    
+    # Model generation parameters (comma-separated lists)
+    parser.add_argument("--noise-levels", type=parse_float_list, help="Noise levels to test (comma-separated, e.g., 0.1,0.25,0.5)")
+    parser.add_argument("--inference-steps", type=parse_int_list, help="Inference steps to test (comma-separated, e.g., 20,25,30)")
+    parser.add_argument("--guidance-scales", type=parse_float_list, help="Guidance scales to test (comma-separated, e.g., 7.0,7.5,8.0)")
+    parser.add_argument("--prompts", type=parse_list_argument, help="Prompts to test (comma-separated, e.g., 'game texture,detailed texture')")
+    
+    # Processing options
+    parser.add_argument("--skip-existing", action="store_true", help="Skip files that already exist")
+    parser.add_argument("--force", action="store_true", help="Force reprocessing of existing files")
+    parser.add_argument("--max-files", type=int, help="Maximum number of files to process")
+    
+    args = parser.parse_args()
+    
+    # Update global variables
+    INPUT_DIR = args.input_dir
+    OUTPUT_DIR = args.output_dir
+    API_BASE_URL = args.api_url
+    
+    # Create output directory
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    
     # Get all original PNG files (skip processed ones)
     png_files = glob.glob(os.path.join(INPUT_DIR, "*.png"))
     png_files = [f for f in png_files if not any(suffix in f for suffix in ["_4x", "_hq", "_std", "_cons", "_opt", "_trans"])]
@@ -225,6 +334,13 @@ def main():
     if not png_files:
         print(f"No unprocessed PNG files found in {INPUT_DIR} directory!")
         return
+    
+    # Limit files if specified
+    if args.max_files:
+        png_files = png_files[:args.max_files]
+    
+    # Generate parameter combinations
+    combinations = generate_parameter_combinations(args)
     
     # Check for transparency
     transparent_files = []
@@ -242,7 +358,6 @@ def main():
     print(f"📁 Input: {INPUT_DIR}/")
     print(f"📁 Output: {OUTPUT_DIR}/")
     print(f"🌐 API: {API_BASE_URL}")
-    print("⚡ OPTIMIZED SETTINGS: 25 steps, 7.5 guidance, 0.25 noise")
     print("🔧 TRANSPARENCY METHOD: Split RGBA → Upscale RGB+Alpha → Recombine")
     print("=" * 70)
     
@@ -261,68 +376,80 @@ def main():
         return
     
     total_files = len(png_files)
+    total_combinations = len(combinations)
+    total_operations = total_files * total_combinations
+    
     successful = 0
     failed = 0
     transparency_preserved = 0
     total_start_time = time.time()
     
+    operation_count = 0
+    
     for i, input_path in enumerate(png_files, 1):
         filename = os.path.basename(input_path)
-        # Create output filename by inserting "_4x" before the extension
-        name_part, ext = os.path.splitext(filename)
-        output_filename = f"{name_part}_4x{ext}"
-        output_path = os.path.join(OUTPUT_DIR, output_filename)
-        
-        # Skip if already processed
-        if os.path.exists(output_path):
-            print(f"⏭️  [{i:2d}/{total_files}] Skipping {filename} (already exists)")
-            successful += 1
-            continue
-        
-        prompt = get_minimal_prompt_for_texture(filename)
         has_transparency = check_transparency(input_path)
         
-        print(f"🔄 [{i:2d}/{total_files}] Processing {filename} → {output_filename}")
+        print(f"🔄 [{i:2d}/{total_files}] Processing {filename}")
         if has_transparency:
             print(f"   ✨ Transparency detected - using RGB+Alpha method")
-        print(f"   💭 Minimal Prompt: {prompt}")
         
-        start_time = time.time()
-        success, result, method = upscale_image_with_transparency(input_path, output_path, prompt)
-        end_time = time.time()
-        
-        if success:
-            file_size_kb = int(result) / 1024
-            processing_time = end_time - start_time
-            if method == "transparency_preserved":
-                print(f"   ✅ Success! {file_size_kb:.1f}KB in {processing_time:.1f}s (transparency preserved)")
-                transparency_preserved += 1
+        for j, (noise_level, inference_steps, guidance_scale, prompt) in enumerate(combinations, 1):
+            operation_count += 1
+            
+            # Create output filename with parameter information
+            output_filename = create_output_filename(filename, noise_level, inference_steps, guidance_scale, prompt)
+            output_path = os.path.join(OUTPUT_DIR, output_filename)
+            
+            # Skip if already processed and not forcing
+            if os.path.exists(output_path) and not args.force:
+                print(f"   ⏭️  [{j:2d}/{total_combinations}] Skipping {output_filename} (already exists)")
+                successful += 1
+                continue
+            
+            print(f"   🔄 [{j:2d}/{total_combinations}] Testing: n={noise_level}, i={inference_steps}, g={guidance_scale}, p='{prompt}'")
+            print(f"   💭 Output: {output_filename}")
+            
+            start_time = time.time()
+            success, result, method = upscale_image_with_transparency(
+                input_path, output_path, prompt, noise_level, inference_steps, guidance_scale
+            )
+            end_time = time.time()
+            
+            if success:
+                if isinstance(result, (int, float)):
+                    file_size_kb = result / 1024
+                else:
+                    file_size_kb = 0
+                processing_time = end_time - start_time
+                if method == "transparency_preserved":
+                    print(f"      ✅ Success! {file_size_kb:.1f}KB in {processing_time:.1f}s (transparency preserved)")
+                    transparency_preserved += 1
+                else:
+                    print(f"      ✅ Success! {file_size_kb:.1f}KB in {processing_time:.1f}s (standard)")
+                successful += 1
             else:
-                print(f"   ✅ Success! {file_size_kb:.1f}KB in {processing_time:.1f}s (standard)")
-            successful += 1
-        else:
-            print(f"   ❌ Failed ({method}): {result}")
-            failed += 1
+                print(f"      ❌ Failed ({method}): {result}")
+                failed += 1
         
         print()  # Empty line for readability
     
     total_time = time.time() - total_start_time
     
     print("=" * 70)
-    print(f"🎯 TRANSPARENCY-PRESERVING PROCESSING COMPLETE!")
-    print(f"✅ Successful: {successful}/{total_files}")
-    print(f"❌ Failed: {failed}/{total_files}")
-    print(f"✨ Transparency preserved: {transparency_preserved} files")
+    print(f"🎯 PARAMETER TESTING COMPLETE!")
+    print(f"✅ Successful: {successful}/{total_operations}")
+    print(f"❌ Failed: {failed}/{total_operations}")
+    print(f"✨ Transparency preserved: {transparency_preserved} operations")
     print(f"⏱️  Total Time: {total_time:.1f} seconds")
     print(f"📁 Enhanced files saved in: {OUTPUT_DIR}/")
-    print(f"📝 Naming convention: original_name_4x.png")
+    print(f"📝 Naming convention: original_name_n{noise_level}_i{inference_steps}_g{guidance_scale}_{prompt}.png")
     print(f"🔧 Method: RGB+Alpha split for transparent images")
-    print(f"⚡ Settings: 25 steps, 7.5 guidance, 0.25 noise (research-optimized)")
     
     if successful > 0:
-        print(f"\n📊 Average processing time: {total_time/total_files:.1f}s per image")
+        print(f"\n📊 Average processing time: {total_time/total_operations:.1f}s per operation")
         if transparency_preserved > 0:
-            print(f"🌟 Successfully preserved transparency in {transparency_preserved} images!")
+            print(f"🌟 Successfully preserved transparency in {transparency_preserved} operations!")
 
 if __name__ == "__main__":
     main() 

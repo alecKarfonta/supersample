@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  review-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.review
+    container_name: review-ui
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./examples:/app/examples
+      - ./output:/app/output
+      - ./good_output:/app/good_output
+      - ./bad_output:/app/bad_output
+    restart: unless-stopped 

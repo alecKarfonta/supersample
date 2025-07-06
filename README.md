@@ -10,6 +10,7 @@ A production-ready API for image super sampling using Stable Diffusion x4 upscal
 - **RESTful API**: Clean FastAPI endpoints for easy integration
 - **Batch Processing**: Command-line tools for processing multiple images
 - **Research-Optimized**: Parameters tuned based on SDXL research for optimal results
+- **Review System**: Web-based UI for reviewing and rating generated images with automatic statistics tracking
 
 ## 📋 Requirements
 
@@ -70,11 +71,51 @@ curl "http://localhost:8888/api/v1/model-info"
 ### Batch Processing
 
 ```bash
-# Process all images in examples/ folder
-python batch_upscale.py
+# Process all images in examples/ folder with default parameters
+python3 batch_upscale.py
+
+# Test different parameter combinations
+python3 batch_upscale.py --noise-levels 0.1,0.25,0.5 --inference-steps 20,25,30 --guidance-scales 7.0,7.5,8.0 --prompts "game texture,detailed texture"
 
 # Output will be saved to output/ folder
 ```
+
+### Review System
+
+The review system provides a web-based interface for evaluating generated images and tracking parameter performance.
+
+#### Starting the Review UI
+
+```bash
+# Using Docker (recommended)
+docker compose -f docker-compose.review.yml up -d
+
+# The review UI will be available at http://localhost:5000
+```
+
+#### Using the Review Interface
+
+1. **Browse Images**: The interface shows original images alongside all generated variations
+2. **Rate Images**: Click any generated image to open a side-by-side comparison with the original
+3. **Mark Quality**: Use thumbs up (👍) for good results or thumbs down (👎) for poor results
+4. **Confirm Selections**: Click "Confirm Selections" to move rated images to `good_output/` or `bad_output/` folders
+5. **View Statistics**: Click "View Stats" to see a leaderboard of parameter set performance
+
+#### Statistics Tracking
+
+The review system automatically tracks:
+- Parameter combinations (noise level, inference steps, guidance scale, prompt)
+- Success rates for each parameter set
+- Individual image ratings with timestamps
+- SQLite database (`review_stats.db`) for persistent storage
+
+#### Parameter Set Leaderboard
+
+Visit `http://localhost:5000/stats` to see:
+- Ranked parameter sets by success rate
+- Good/bad/total counts for each combination
+- Percentage success rates
+- Export capabilities for further analysis
 
 ## 🔧 Configuration
 
@@ -93,6 +134,11 @@ The `docker-compose.yml` file includes:
 - Volume mounts for cache and temp directories
 - Health checks
 - Port mapping (8888)
+
+The `docker-compose.review.yml` file includes:
+- Review UI with Flask
+- Volume mounts for examples, output, good_output, and bad_output folders
+- Port mapping (5000)
 
 ## 🎯 Transparency Preservation
 
@@ -137,7 +183,16 @@ supersample/
 │   └── main.py                # FastAPI application
 ├── examples/                  # Input images
 ├── output/                    # Processed images
+├── good_output/               # Rated good images
+├── bad_output/                # Rated bad images
+├── templates/                 # Review UI templates
 ├── batch_upscale.py          # Batch processing script
+├── review_ui.py              # Review system Flask app
+├── docker-compose.yml        # Main API Docker configuration
+├── docker-compose.review.yml # Review UI Docker configuration
+├── Dockerfile.review         # Review UI container definition
+├── requirements_review.txt    # Review UI dependencies
+├── review_stats.db           # SQLite database for ratings
 ├── docker-compose.yml        # Docker configuration
 ├── Dockerfile                # Container definition
 ├── requirements.txt           # Python dependencies
@@ -148,10 +203,37 @@ supersample/
 
 The API uses research-optimized parameters based on SDXL studies:
 
-- **Steps**: 25 (optimal for upscaling)
-- **Guidance Scale**: 7.5 (sweet spot for preservation)
 - **Noise Level**: 0.25 (preserves original structure)
-- **Scheduler**: UniPC (fast and stable)
+- **Inference Steps**: 25 (optimal for SDXL upscaling)
+- **Guidance Scale**: 7.5 (sweet spot for upscaling)
+
+The review system enables systematic parameter optimization by tracking which combinations produce the best results for your specific use case.
+
+## 📈 Review System Benefits
+
+- **Systematic Evaluation**: Compare multiple parameter combinations side-by-side
+- **Data-Driven Optimization**: Use statistics to identify the best parameters for your images
+- **Transparency Preservation**: Maintain alpha channels throughout the review process
+- **Batch Processing**: Efficiently review large numbers of generated images
+- **Persistent Tracking**: SQLite database maintains rating history across sessions
+
+## 🚀 Quick Start with Review
+
+1. **Generate Images**: Run batch processing with parameter combinations
+   ```bash
+   python3 batch_upscale.py --noise-levels 0.1,0.25,0.5 --inference-steps 20,25,30
+   ```
+
+2. **Start Review UI**: Launch the review interface
+   ```bash
+   docker compose -f docker-compose.review.yml up -d
+   ```
+
+3. **Review Images**: Visit http://localhost:5000 and rate your images
+
+4. **Analyze Results**: Check http://localhost:5000/stats for parameter performance
+
+5. **Optimize**: Use the statistics to refine your parameter combinations for future runs
 
 ## 🤝 Contributing
 
