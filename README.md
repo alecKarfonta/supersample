@@ -117,6 +117,20 @@ Visit `http://localhost:5000/stats` to see:
 - Percentage success rates
 - Export capabilities for further analysis
 
+## 🖼️ Review System UI Examples
+
+Below are screenshots of the web-based review UI in action:
+
+**Main Review Grid**
+
+![Review UI Screenshot](assets/review_ui.png)
+*The main review UI showing a grid of original and generated images for batch comparison and selection.*
+
+**Review Modal (Side-by-Side Comparison)**
+
+![Review Modal Screenshot](assets/review_ui_2.png)
+*The review modal displays a side-by-side comparison of the "Original" (left) and "Generated" (right) images. The original image is a low-resolution, pixelated texture of three gold or brown objects on a transparent background. The generated image shows the same objects, but upscaled with smoother edges and more detail, while preserving transparency. Below the images are "Good" (thumbs up) and "Bad" (thumbs down) buttons, allowing the user to rate the quality of the upscaled result.*
+
 ## 🔧 Configuration
 
 ### Environment Variables
@@ -228,34 +242,3 @@ The review system enables systematic parameter optimization by tracking which co
    ```bash
    docker compose -f docker-compose.review.yml up -d
    ```
-
-3. **Review Images**: Visit http://localhost:5000 and rate your images
-
-4. **Analyze Results**: Check http://localhost:5000/stats for parameter performance
-
-5. **Optimize**: Use the statistics to refine your parameter combinations for future runs
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- [Stability AI](https://stability.ai/) for the Stable Diffusion x4 upscaler
-- [Hugging Face](https://huggingface.co/) for model hosting
-- [FastAPI](https://fastapi.tiangolo.com/) for the web framework
-
-## 📞 Support
-
-For issues and questions:
-- Create an issue on GitHub
-- Check the API health endpoint for system status
-- Review the logs: `docker compose logs -f` 
