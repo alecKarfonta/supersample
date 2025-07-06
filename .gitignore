@@ -1,3 +1,8 @@
+# Output files
+output/
+good_output/
+bad_output/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -86,6 +91,7 @@ htmlcov/
 !output/*.png
 !output/*.jpg
 !output/*.jpeg
+!assets/*.png
 
 # Large files
 *.h5
@@ -109,4 +115,9 @@ wandb/
 
 # Local development
 local/
-dev/ 
+dev/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3 

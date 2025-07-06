@@ -14,16 +14,6 @@ from pathlib import Path
 from PIL import Image
 import numpy as np
 
-# Handle PIL version compatibility
-try:
-    LANCZOS = Image.Resampling.LANCZOS
-except AttributeError:
-    try:
-        LANCZOS = Image.LANCZOS
-    except AttributeError:
-        # Use a string-based approach for older PIL versions
-        LANCZOS = "lanczos"
-
 API_BASE_URL = "http://localhost:8888"
 INPUT_DIR = "examples"
 OUTPUT_DIR = "output"
@@ -150,7 +140,7 @@ def upscale_alpha_traditional(alpha_image, scale_factor=4):
     """Upscale alpha channel using traditional high-quality algorithm."""
     # Use Lanczos for high-quality alpha upscaling
     new_size = (alpha_image.width * scale_factor, alpha_image.height * scale_factor)
-    upscaled_alpha = alpha_image.resize(new_size, LANCZOS)
+    upscaled_alpha = alpha_image.resize(new_size, Image.Resampling.LANCZOS)
     return upscaled_alpha
 
 def combine_rgb_alpha(rgb_image, alpha_image):
@@ -158,7 +148,7 @@ def combine_rgb_alpha(rgb_image, alpha_image):
     # Ensure both images are the same size
     if rgb_image.size != alpha_image.size:
         # Resize alpha to match RGB (in case of slight size differences)
-        alpha_image = alpha_image.resize(rgb_image.size, LANCZOS)
+        alpha_image = alpha_image.resize(rgb_image.size, Image.Resampling.LANCZOS)
     
     # Convert RGB to RGBA and apply alpha
     rgba_image = rgb_image.convert('RGBA')
@@ -223,7 +213,7 @@ def upscale_image_with_transparency(input_path, output_path, prompt, noise_level
             
             upscaled_rgb = result
             
-            print(f"      🖼️  Upscaling Alpha component with Lanczos...")
+            print(f"      🖼️  Upscaling Alpha component with LANCZOS...")
             upscaled_alpha = upscale_alpha_traditional(alpha_img, scale_factor=4)
             
             print(f"      🔗 Combining RGB + Alpha into final RGBA...")
@@ -274,6 +264,18 @@ def create_output_filename(base_name, noise_level, inference_steps, guidance_sca
     name_part, ext = os.path.splitext(base_name)
     return f"{name_part}{param_suffix}{ext}"
 
+def remove_white_halo(img: Image.Image) -> Image.Image:
+    """
+    Premultiplies RGB by alpha to remove white (or light) halos on transparent PNGs.
+    """
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+    arr = np.array(img).astype(np.float32)
+    alpha = arr[..., 3:4] / 255.0
+    arr[..., :3] = arr[..., :3] * alpha
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, 'RGBA')
+
 def main():
     """Main batch processing function with transparency preservation and parameter testing."""
     # Declare globals at the start
@@ -316,6 +318,7 @@ Examples:
     parser.add_argument("--skip-existing", action="store_true", help="Skip files that already exist")
     parser.add_argument("--force", action="store_true", help="Force reprocessing of existing files")
     parser.add_argument("--max-files", type=int, help="Maximum number of files to process")
+    parser.add_argument('--remove-white-halo', action='store_true', help='Post-process output PNGs to remove white halos (premultiply RGB by alpha)')
     
     args = parser.parse_args()
     
@@ -428,6 +431,10 @@ Examples:
                 else:
                     print(f"      ✅ Success! {file_size_kb:.1f}KB in {processing_time:.1f}s (standard)")
                 successful += 1
+                # After saving output_img, optionally remove white halo
+                if args.remove_white_halo:
+                    output_img = remove_white_halo(Image.open(output_path))
+                    output_img.save(output_path)
             else:
                 print(f"      ❌ Failed ({method}): {result}")
                 failed += 1
