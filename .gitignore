@@ -75,8 +75,7 @@ downloads/
 htmlcov/
 .pytest_cache/
 
-# Output files (keep examples but ignore processed outputs)
-output/
+# Output files (keep examples and output but ignore other processed outputs)
 *.png
 *.jpg
 *.jpeg
@@ -84,6 +83,9 @@ output/
 !examples/*.png
 !examples/*.jpg
 !examples/*.jpeg
+!output/*.png
+!output/*.jpg
+!output/*.jpeg
 
 # Large files
 *.h5
