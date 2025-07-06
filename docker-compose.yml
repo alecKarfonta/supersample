@@ -1,0 +1,50 @@
+services:
+  supersample-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: supersample-api
+    ports:
+      - "8888:8000"
+    environment:
+      - SUPERSAMPLE_DEBUG=false
+      - SUPERSAMPLE_LOG_LEVEL=INFO
+      - SUPERSAMPLE_DEVICE=cuda
+      - SUPERSAMPLE_TORCH_DTYPE=float16
+      - SUPERSAMPLE_ENABLE_ATTENTION_SLICING=true
+      - SUPERSAMPLE_MAX_CONCURRENT_REQUESTS=3
+      - SUPERSAMPLE_REQUEST_TIMEOUT=60
+      - SUPERSAMPLE_MAX_FILE_SIZE=10485760  # 10MB
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - ./cache:/app/cache
+      - /tmp/supersample:/tmp/supersample
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 5m
+    restart: unless-stopped
+
+# Redis temporarily disabled due to port conflict
+# Uncomment and modify port if needed:
+#  redis:
+#    image: redis:7-alpine
+#    container_name: supersample-redis
+#    ports:
+#      - "6380:6379"  # Use different external port
+#    volumes:
+#      - redis_data:/data
+#    command: redis-server --appendonly yes
+#    restart: unless-stopped
+
+#volumes:
+#  redis_data: 

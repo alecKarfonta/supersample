@@ -1,0 +1,110 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Model cache and downloads
+.cache/
+models/
+downloads/
+*.safetensors
+*.bin
+*.ckpt
+
+# Docker
+.dockerignore
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Output files (keep examples but ignore processed outputs)
+output/
+*.png
+*.jpg
+*.jpeg
+*.webp
+!examples/*.png
+!examples/*.jpg
+!examples/*.jpeg
+
+# Large files
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# MLflow
+mlruns/
+
+# TensorBoard
+runs/
+tensorboard_logs/
+
+# Weights & Biases
+wandb/
+
+# Local development
+local/
+dev/ 
